@@ -2353,7 +2353,7 @@ func TestCckmAWSKeyMaterialCreateValidation(t *testing.T) {
 						key_material = [{ source_key_identifier = "valid-id", source_key_tier = "" }]
 					}`,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("non-whitespace"),
+				ExpectError: regexp.MustCompile("value must be one of"),
 			},
 			// Step 6: key_material[0].source_key_tier whitespace-only
 			{
@@ -2363,7 +2363,7 @@ func TestCckmAWSKeyMaterialCreateValidation(t *testing.T) {
 						key_material = [{ source_key_identifier = "valid-id", source_key_tier = "   " }]
 					}`,
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("non-whitespace"),
+				ExpectError: regexp.MustCompile("value must be one of"),
 			},
 			// Step 7: key_material[0].valid_to invalid date format
 			{

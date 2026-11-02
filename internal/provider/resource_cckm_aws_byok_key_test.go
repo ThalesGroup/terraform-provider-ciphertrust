@@ -526,7 +526,48 @@ func TestCckmAWSByokKeyRSA(t *testing.T) {
 			}
 		}`
 
+	// Steps 4 to 6: a rotation scheduler with default parameters is attached to the key and run.
+	// rotate_material is omitted so it plans as true on CDSPaaS and CM 2.21 or later, and aws_retain_alias
+	// is false. RSA keys have no rotatable material so the server replaces the key.
+	rotateScheduler := applyCDSPAAS(fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name = "aws"
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}`, "tf-byok-rsa-"+uuid.New().String()[:8]))
+
+	rotateKeyConfig := `
+		resource "ciphertrust_aws_byok_key" "byok_rsa_key" {
+			enable_key            = true
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = ciphertrust_cm_key.cm_rsa_key.id
+			source_key_tier       = "local"
+			aws_param = {
+				alias                    = [local.alias]
+				customer_master_key_spec = "RSA_2048"
+				key_usage                = "ENCRYPT_DECRYPT"
+				description              = "RSA 2048 BYOK key - updated"
+				tags = {
+					KeyType = "RSA"
+					KeySize = "2048"
+					Updated = "true"
+				}
+			}
+			enable_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler.id
+				key_source    = "local"
+			}
+		}`
+
 	keyResource := "ciphertrust_aws_byok_key.byok_rsa_key"
+	schedulerResource := "ciphertrust_scheduler.scheduler"
 	base := awsConnectionResource + cmRsaKeyConfig
 
 	resource.Test(t, resource.TestCase{
@@ -570,6 +611,36 @@ func TestCckmAWSByokKeyRSA(t *testing.T) {
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.KeyType", "RSA"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.KeySize", "2048"),
 					resource.TestCheckResourceAttr(keyResource, "aws_param.tags.Updated", "true"),
+				),
+			},
+			{
+				// Step 4: enable the key again and attach a rotation scheduler. rotate_material is omitted
+				// (planned as true on 2.21 or later). RSA keys have no rotatable material so the server
+				// ignores it and replaces the key.
+				Config: base + rotateScheduler + rotateKeyConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(keyResource, "aws_param.enabled", "true"),
+					resource.TestCheckResourceAttrPair(keyResource, "labels.job_config_id", schedulerResource, "id"),
+				),
+			},
+			{
+				// Step 5: run the scheduler now and wait for the job to complete. The rotation creates a
+				// new key and moves the alias to it, so the original key (still tracked by this resource)
+				// no longer has its alias. A non-empty plan (alias drift) is expected.
+				Config: base + rotateScheduler + rotateKeyConfig,
+				Check: resource.ComposeTestCheckFunc(
+					testAccRunCCKMRotation(schedulerResource),
+				),
+				ExpectNonEmptyPlan: true,
+			},
+			{
+				// Step 6: refresh after the rotation. The key resource is key-centric so it still
+				// tracks the original key. That key is now archived and has lost its labels. Refresh
+				// only, because the configured alias cannot be re-applied to an archived key.
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckNoResourceAttr(keyResource, "labels.job_config_id"),
 				),
 			},
 		},
@@ -1480,6 +1551,80 @@ func TestCckmAWSByokKeyCreateValidation(t *testing.T) {
 					}`,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("value must be one of"),
+			},
+		},
+	})
+}
+
+// TestCckmAWSKeySchedulerByokWithRotateMaterialAccepted verifies that a BYOK AES key can use a
+// rotation scheduler that has rotate_material = true. The key and an unattached scheduler are
+// created first, then the scheduler is attached on update.
+func TestCckmAWSKeySchedulerByokWithRotateMaterialAccepted(t *testing.T) {
+	awsConnectionResource, ok := initCckmAwsTest()
+	if !ok {
+		t.Skip()
+	}
+
+	schedulerName := "tf-byok-material-" + uuid.New().String()[:8]
+
+	scheduler := applyCDSPAAS(fmt.Sprintf(`
+		resource "ciphertrust_scheduler" "scheduler" {
+			cckm_key_rotation_params = {
+				cloud_name      = "aws"
+				rotate_material = true
+			}
+			end_date   = "2050-03-07T14:24:00Z"
+			name       = "%s"
+			operation  = "cckm_key_rotation"
+			run_at     = "0 9 * * sat"
+			run_on     = "any"
+			start_date = "2026-03-07T14:24:00Z"
+		}`, schedulerName))
+
+	createConfig := awsConnectionResource + cmAesKeyConfig + scheduler + `
+		resource "ciphertrust_aws_byok_key" "byok_key" {
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+			source_key_tier       = "local"
+			aws_param = {
+				alias = [local.alias]
+			}
+		}`
+
+	attachSchedulerConfig := awsConnectionResource + cmAesKeyConfig + scheduler + `
+		resource "ciphertrust_aws_byok_key" "byok_key" {
+			kms_id                = ciphertrust_aws_kms.kms.id
+			region                = ciphertrust_aws_kms.kms.regions[0]
+			source_key_identifier = ciphertrust_cm_key.cm_aes_key.id
+			source_key_tier       = "local"
+			aws_param = {
+				alias = [local.alias]
+			}
+			enable_rotation = {
+				job_config_id = ciphertrust_scheduler.scheduler.id
+				key_source    = "local"
+			}
+		}`
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { cleanupCckmAwsKMS() },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Step 1: create a BYOK AES key and a scheduler with rotate_material = true, unattached.
+				Config: createConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("ciphertrust_aws_byok_key.byok_key", "aws_param.origin", "EXTERNAL"),
+					resource.TestCheckResourceAttr("ciphertrust_scheduler.scheduler", "cckm_key_rotation_params.rotate_material", "true"),
+				),
+			},
+			{
+				// Step 2: attaching a scheduler with rotate_material = true to the BYOK AES key is accepted.
+				Config: attachSchedulerConfig,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrPair("ciphertrust_aws_byok_key.byok_key", "labels.job_config_id", "ciphertrust_scheduler.scheduler", "id"),
+				),
 			},
 		},
 	})

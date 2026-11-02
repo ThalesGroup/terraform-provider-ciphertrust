@@ -1008,8 +1008,8 @@ func TestCckmAWSKeyMultiRegionNativeAndMakePrimary(t *testing.T) {
 	})
 }
 
-// TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses primary_region to change replica key to the primary key
-// TestCckmAWSKeyMultiRegionNative creates a key and a replica and uses the primary_key to make change the replica to the primary
+// TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion creates a native multi-region key and a replica and uses primary_region
+// to promote the replica to the primary key.
 func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1151,6 +1151,39 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 			resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
 		}, step7Checks...)
 	}
+	// Build the step 8 checks. On CM < 2.22 there is no individual key refresh and CM updates
+	// the multi region configuration of each key in the background, so any key (including the
+	// replicas) may still report the old primary. Only the promoted replica, which the provider
+	// waits for, is checked there. CM >= 2.22 and CDSPaaS refresh every key so all are checked.
+	step8Checks := []resource.TestCheckFunc{
+		resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
+	}
+	if supportsKeyRefresh {
+		step8Checks = append(step8Checks,
+			resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+			resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.replica_keys.#", "3"),
+			resource.TestCheckResourceAttrSet(keyResource, "multi_region_configuration.primary_key.arn"),
+
+			resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
+			resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
+
+			resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+			resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
+			resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
+
+			resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
+			resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.replica_keys.#", "3"),
+			resource.TestCheckResourceAttrSet(replica3Resource, "multi_region_configuration.primary_key.arn"),
+
+			// Every key must agree on the new primary region and ARN.
+			resource.TestCheckResourceAttrPair(keyResource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
+			resource.TestCheckResourceAttrPair(keyResource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
+			resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
+			resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
+			resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
+			resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
+		)
+	}
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { cleanupCckmAwsKMS() },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -1283,35 +1316,12 @@ func TestCckmAWSKeyMultiRegionNativeAndPrimaryRegion(t *testing.T) {
 			},
 			{
 				// Step 8: refresh state to confirm the promoted replica is now PRIMARY.
-				// All 4 keys must agree on the new primary's region and ARN, and every key
-				// must list all 3 replica regions in replica_keys.
+				// On CM >= 2.22 every key must list all 3 replica regions and agree on the new primary.
+				// On CM < 2.22 there is no individual key refresh and CM updates the keys in the
+				// background, so only the promoted replica is checked (see step8Checks).
 				PreConfig:    func() { logTestStep(t.Name(), "Step 8") },
 				RefreshState: true,
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(keyResource, "multi_region_configuration.replica_keys.#", "3"),
-					resource.TestCheckResourceAttrSet(keyResource, "multi_region_configuration.primary_key.arn"),
-
-					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.multi_region_key_type", "PRIMARY"),
-					resource.TestCheckResourceAttr(replicaResource, "multi_region_configuration.replica_keys.#", "3"),
-					resource.TestCheckResourceAttrSet(replicaResource, "multi_region_configuration.primary_key.arn"),
-
-					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(replica2Resource, "multi_region_configuration.replica_keys.#", "3"),
-					resource.TestCheckResourceAttrSet(replica2Resource, "multi_region_configuration.primary_key.arn"),
-
-					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.multi_region_key_type", "REPLICA"),
-					resource.TestCheckResourceAttr(replica3Resource, "multi_region_configuration.replica_keys.#", "3"),
-					resource.TestCheckResourceAttrSet(replica3Resource, "multi_region_configuration.primary_key.arn"),
-
-					// All 4 keys must agree on the new primary's region and ARN.
-					resource.TestCheckResourceAttrPair(keyResource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
-					resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
-					resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.region", replicaResource, "multi_region_configuration.primary_key.region"),
-					resource.TestCheckResourceAttrPair(keyResource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
-					resource.TestCheckResourceAttrPair(replica2Resource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
-					resource.TestCheckResourceAttrPair(replica3Resource, "multi_region_configuration.primary_key.arn", replicaResource, "multi_region_configuration.primary_key.arn"),
-				),
+				Check:        resource.ComposeTestCheckFunc(step8Checks...),
 			},
 		},
 	})

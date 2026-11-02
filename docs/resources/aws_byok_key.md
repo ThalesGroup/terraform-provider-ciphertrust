@@ -94,7 +94,7 @@ resource "ciphertrust_aws_byok_key" "byok_key" {
   enable_rotation = {
     disable_encrypt = false
     job_config_id   = ciphertrust_scheduler.scheduled_rotation.id
-    key_source      = "ciphertrust"
+    key_source      = "local"
   }
 }
 
@@ -132,7 +132,7 @@ resource "ciphertrust_aws_byok_key" "byok_key_mr_replica" {
 
 - `aws_param` (Attributes) AWS key parameters. Input fields are sent to the API on create/update; all fields are populated from the API response. (see [below for nested schema](#nestedatt--aws_param))
 - `enable_key` (Boolean) Enable or disable the key. Default is true. Cannot be set to false at creation time; disable via update after the key has been created.
-- `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. The 'disable_encrypt' and 'disable_encrypt_on_all_accounts' parameters are mutually exclusive. Cannot be configured during key creation; configure via update after the key has been created. XKS keys require local_hosted_params.linked = true. (see [below for nested schema](#nestedatt--enable_rotation))
+- `enable_rotation` (Attributes) Register the key with a CipherTrust Manager scheduled rotation job. Can only be configured after key creation. 'disable_encrypt' and 'disable_encrypt_on_all_accounts' are mutually exclusive. XKS keys require local_hosted_params.linked = true. For native AES keys, rotation with rotate_material = false creates a new key, moves the first alias, and removes labels from the old key, causing Terraform drift. The new key must be imported into Terraform to be managed. Alternatively, use auto_rotate for native AWS keys or ciphertrust_aws_key_rotation for on-demand rotation. (see [below for nested schema](#nestedatt--enable_rotation))
 - `key_policy` (Attributes) Key policy parameters. (see [below for nested schema](#nestedatt--key_policy))
 - `kms_id` (String) (Conditionally immutable) CipherTrust Manager ID of the KMS to create the key in. **Required** unless replicating a multi-region key. Can only be changed if the previously configured KMS no longer exists in CipherTrust Manager.
 - `primary_region` (String) Updates the primary region of a multi-region key. Only valid during updates. On CipherTrust Manager versions earlier than 2.22, keys in the multi-region set may not reflect the correct multi-region configuration in Terraform state after this operation. Individual key refresh was not introduced until CipherTrust Manager 2.22. To synchronize state, trigger a KMS-wide synchronization using a ciphertrust_scheduler resource with operation = "cckm_synchronization", then run terraform refresh.

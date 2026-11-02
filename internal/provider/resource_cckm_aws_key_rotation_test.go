@@ -3,10 +3,55 @@ package provider
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
+
+// checkRotationEntry verifies the attributes every rotation_history entry has.
+// aws_params.rotation_type is not checked: the original key material has none.
+func checkRotationEntry(resourceName string, index int) resource.TestCheckFunc {
+	prefix := fmt.Sprintf("rotation_history.%d.", index)
+	return resource.ComposeTestCheckFunc(
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"id"),
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"created_at"),
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"local_key_id"),
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"kms_id"),
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"key_material_origin"),
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"aws_params.key_material_state"),
+		resource.TestCheckResourceAttrSet(resourceName, prefix+"aws_params.key_material_id"),
+	)
+}
+
+// checkRotationHistory verifies rotation_history.
+// With single key refresh (CM 2.22+ and CDSPaaS) it expects exactly expectedCount
+// entries and checks each one. Without it CM may report fewer rotations than have
+// occurred, so it only expects at least one entry and checks the first.
+func checkRotationHistory(resourceName string, expectedCount int, supportsKeyRefresh bool) resource.TestCheckFunc {
+	if !supportsKeyRefresh {
+		return resource.ComposeTestCheckFunc(
+			resource.TestCheckResourceAttrWith(resourceName, "rotation_history.#", func(value string) error {
+				count, err := strconv.Atoi(value)
+				if err != nil {
+					return err
+				}
+				if count < 1 {
+					return fmt.Errorf("expected at least 1 rotation_history entry, got %d", count)
+				}
+				return nil
+			}),
+			checkRotationEntry(resourceName, 0),
+		)
+	}
+	checks := []resource.TestCheckFunc{
+		resource.TestCheckResourceAttr(resourceName, "rotation_history.#", strconv.Itoa(expectedCount)),
+	}
+	for i := 0; i < expectedCount; i++ {
+		checks = append(checks, checkRotationEntry(resourceName, i))
+	}
+	return resource.ComposeTestCheckFunc(checks...)
+}
 
 // TestCckmAWSKeyRotationNative verifies that rotating a native SYMMETRIC_DEFAULT AWS key
 // via ciphertrust_aws_key_rotation succeeds. The rotation resource calls the AWS
@@ -14,12 +59,13 @@ import (
 //
 // Step 1: Create a native key and request the first on-demand rotation.
 //
-//	Verify the rotation resource is populated and rotation_history has 1 entry.
+//	Verify the rotation resource is populated and rotation_history has the original
+//	key material and the new one (2 entries). Before CM 2.22 at least 1 entry.
 //
 // Step 2: Change the trigger value to request a second rotation (resource replacement).
 //
-//	Verify rotation_history now has 2 entries and that the native key itself
-//	reports a current_key_material_id (only populated after at least one rotation).
+//	Verify rotation_history now has 3 entries (at least 1 before CM 2.22) and that
+//	the native key itself reports a current_key_material_id.
 //
 // Note: ciphertrust_aws_key_rotation only supports native (AWS_KMS origin) symmetric keys.
 //
@@ -34,6 +80,10 @@ func TestCckmAWSKeyRotationNative(t *testing.T) {
 	if getCipherTrustVersion() < 221 {
 		t.Skip("Skipping on CipherTrust version < 221")
 	}
+
+	// Single key refresh is not available before CM 2.22 so CM may report fewer rotations
+	// than have occurred (the rotations still occur in AWS). CDSPaaS reports version 9999.
+	supportsKeyRefresh := getCipherTrustVersion() >= 222
 
 	nativeKeyConfig := `
 		resource "ciphertrust_aws_key" "native_key" {
@@ -81,65 +131,22 @@ func TestCckmAWSKeyRotationNative(t *testing.T) {
 			{
 				// Step 1: first rotation.
 				Config: awsConnectionResource + rotationConfigStr1,
+				// The original key material and the new one should be in the history.
 				Check: resource.ComposeTestCheckFunc(
-					// Rotation resource identity.
 					resource.TestCheckResourceAttrSet(rotationListResource, "id"),
 					resource.TestCheckResourceAttrSet(rotationListResource, "key_id"),
-					// Now the original rotation and the new rotation should be in the history
-					resource.TestCheckResourceAttr(rotationListResource, "rotation_history.#", "2"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.created_at"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.local_key_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.kms_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.key_material_origin"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.aws_params.rotation_type"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.aws_params.key_material_state"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.aws_params.key_material_id"),
-
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.created_at"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.local_key_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.kms_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.key_material_origin"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.aws_params.key_material_state"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.aws_params.key_material_id"),
+					checkRotationHistory(rotationListResource, 2, supportsKeyRefresh),
 				),
 			},
 			{
 				// Step 2: second rotation - change trigger causes resource replacement
 				// which fires another rotate-material call.
 				Config: awsConnectionResource + rotationConfigStr2,
+				// The original key material and the 2 new ones should be in the history.
 				Check: resource.ComposeTestCheckFunc(
-					// Rotation resource identity.
 					resource.TestCheckResourceAttrSet(rotationListResource, "id"),
 					resource.TestCheckResourceAttrSet(rotationListResource, "key_id"),
-					// Now the original rotation and the 2 new rotations should be in the history
-					resource.TestCheckResourceAttr(rotationListResource, "rotation_history.#", "3"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.created_at"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.local_key_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.kms_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.key_material_origin"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.aws_params.rotation_type"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.aws_params.key_material_state"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.0.aws_params.key_material_id"),
-
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.created_at"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.local_key_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.kms_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.key_material_origin"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.aws_params.rotation_type"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.aws_params.key_material_state"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.1.aws_params.key_material_id"),
-
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.created_at"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.local_key_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.kms_id"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.key_material_origin"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.aws_params.key_material_state"),
-					resource.TestCheckResourceAttrSet(rotationListResource, "rotation_history.2.aws_params.key_material_id"),
+					checkRotationHistory(rotationListResource, 3, supportsKeyRefresh),
 				),
 			},
 		},

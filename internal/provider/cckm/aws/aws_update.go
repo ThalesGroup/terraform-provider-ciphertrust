@@ -214,6 +214,13 @@ func updateDescription(ctx context.Context, id string, client *common.Client, ke
 func enableDisableKeyRotation(ctx context.Context, id string, client *common.Client, planInput *AWSKeyUpdateInputTFSDK, keyJSON string, diags *diag.Diagnostics) {
 	client.Log.Debug(common.MSG_METHOD_START + "[aws_update.go -> enableDisableKeyRotation][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[aws_update.go -> enableDisableKeyRotation][" + id + "]")
+	if isArchivedRotatedKey(keyJSON) {
+		msg := "AWS key has been archived by a rotation scheduler. Rotation scheduler changes are skipped for this key."
+		details := utils.ApiError(msg, map[string]interface{}{"key_id": planInput.KeyID, "rotated_to": gjson.Get(keyJSON, "rotated_to").String()})
+		client.Log.Warn(details)
+		diags.AddWarning(details, "Remove this resource from state and import the key identified by rotated_to.")
+		return
+	}
 	actualJobID := gjson.Get(keyJSON, "labels.job_config_id").String()
 
 	if planInput.EnableRotation == nil {
@@ -231,6 +238,13 @@ func enableDisableKeyRotation(ctx context.Context, id string, client *common.Cli
 	if changed {
 		enableKeyRotationJob(ctx, id, client, planInput.KeyID, planInput.EnableRotation, diags)
 	}
+}
+
+// isArchivedRotatedKey returns true when a rotation scheduler has already rotated the key to a new
+// key and archived this one. Such keys cannot have their rotation scheduler changed.
+func isArchivedRotatedKey(keyJSON string) bool {
+	return strings.EqualFold(gjson.Get(keyJSON, "rotation_status").String(), "ARCHIVED") &&
+		gjson.Get(keyJSON, "rotated_to").String() != ""
 }
 
 // enableKeyRotationJob registers an AWS key with a CipherTrust Manager scheduled rotation job.

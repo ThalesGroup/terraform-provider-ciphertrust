@@ -4,7 +4,7 @@ page_title: "ciphertrust_aws_key_rotation Resource - terraform-provider-ciphertr
 subcategory: ""
 description: |-
   Use this resource to perform an on-demand rotation of an AWS native symmetric key. Each time the trigger value changes, exactly one rotation is requested from AWS via CipherTrust Manager. The rotation is a single-shot operation: once rotate-material has been called it will never be retried automatically. To request another rotation, change the trigger value to cause resource replacement. This resource does not manage EXTERNAL keys; use aws_key_material for those.
-  Note: This resource and the datasource are only available for CipherTrust Manager version 2.20 and greater.
+  Note: This resource and the datasource are only available for CipherTrust Manager version 2.20 and greater. Single key refresh is not supported before CipherTrust Manager 2.22. Without it CipherTrust Manager may report an incorrect number of rotations. The rotation itself is still performed in AWS.
 ---
 
 # ciphertrust_aws_key_rotation (Resource)
@@ -13,7 +13,7 @@ Use this resource to perform an on-demand rotation of an AWS native symmetric ke
 
 
 
-Note: This resource and the datasource are only available for CipherTrust Manager version 2.20 and greater.
+Note: This resource and the datasource are only available for CipherTrust Manager version 2.20 and greater. Single key refresh is not supported before CipherTrust Manager 2.22. Without it CipherTrust Manager may report an incorrect number of rotations. The rotation itself is still performed in AWS.
 
 ## Example Usage
 
