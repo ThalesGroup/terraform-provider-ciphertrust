@@ -38,8 +38,8 @@ func TestCckmAWSKeyMaterialCreateAndUpdate(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -204,8 +204,8 @@ func TestCckmAWSKeyMaterialCombinedUpdates(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -341,8 +341,8 @@ func TestCckmAWSKeyMaterialRepairPendingImport(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -444,8 +444,8 @@ func TestCckmAWSKeyMaterialRepairPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -584,8 +584,8 @@ func TestCckmAWSKeyMaterialRepairCombined(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1357,8 +1357,8 @@ func TestCckmAWSKeyMaterialAdoptPendingRotation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -1883,8 +1883,8 @@ func TestCckmAWSKeyMaterialPlanValidation(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {
@@ -2204,8 +2204,8 @@ func TestCckmAWSByokKeyCreatePendingImport(t *testing.T) {
 	if os.Getenv("CDSPAAS") == "true" {
 		t.Skip("Skipping on CDSPAAS")
 	}
-	if getCipherTrustVersion() < 223 {
-		t.Skip("Skipping on CipherTrust version < 223")
+	if getCipherTrustVersion() < 222 {
+		t.Skip("Skipping on CipherTrust version < 222")
 	}
 	awsConnectionResource, ok := initCckmAwsTest()
 	if !ok {

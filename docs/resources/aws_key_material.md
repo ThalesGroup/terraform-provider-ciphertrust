@@ -6,7 +6,7 @@ description: |-
   Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.
   This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.
   CipherTrust Manager version requirements:
-  Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later, or CDSPaaS.Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.CipherTrust Manager versions earlier than 2.23 are not supported by this resource.
+  Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.22 or later, or CDSPaaS.Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.CipherTrust Manager versions earlier than 2.22 are not supported by this resource.
   Key features:
   Import key material into AWS EXTERNAL symmetric keys.Rotate to new key material by adding additional key_material entries.Automatically recover key material that enters an intermediate state due to failed or out-of-band operations.Support multi-region symmetric keys, automatically keeping replica key material synchronized with the primary key.Adopt key material that was created outside Terraform by adding a matching key_material entry.
   Terraform actively reconciles all configured key material with the live CipherTrust Manager rotation history. If configured material enters one of the following states, Terraform automatically attempts recovery during the next apply:
@@ -26,9 +26,9 @@ This resource imports key material from CipherTrust Manager source keys into an 
 
 **CipherTrust Manager version requirements:**
 
-* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later, or CDSPaaS.
+* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.22 or later, or CDSPaaS.
 * Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.
-* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.
+* CipherTrust Manager versions earlier than 2.22 are not supported by this resource.
 
 Key features:
 
@@ -57,6 +57,9 @@ To avoid drift and unexpected behaviour, all key material lifecycle operations s
 ## Example Usage
 
 ```terraform
+# Requires CipherTrust Manager 2.22 or later (single-region EXTERNAL keys) or CDSPaaS.
+# Multi-region EXTERNAL keys require CipherTrust Manager 2.24 or later or CDSPaaS.
+
 # Pre-requisites - AWS connection and KMS
 resource "ciphertrust_aws_connection" "aws_connection" {
   name = "aws-connection-name"
@@ -91,14 +94,14 @@ resource "ciphertrust_aws_byok_key" "ext_key" {
 resource "ciphertrust_cm_key" "material_v1" {
   name      = "external-key-material-v1"
   algorithm = "AES"
-  size      = 256
+  key_size  = 256
 }
 
 # CipherTrust AES key used as the rotated (replacement) key material
 resource "ciphertrust_cm_key" "material_v2" {
   name      = "external-key-material-v2"
   algorithm = "AES"
-  size      = 256
+  key_size  = 256
 }
 
 # Import initial key material to enable the EXTERNAL key.
@@ -109,23 +112,24 @@ resource "ciphertrust_cm_key" "material_v2" {
 # rotate-material so the new entry becomes CURRENT and the previous entry moves to
 # PREVIOUS state. Remove an entry to delete that material version from the key.
 resource "ciphertrust_aws_key_material" "km" {
-  aws_key_id = ciphertrust_aws_byok_key.ext_key.key_id
+  aws_key_id = ciphertrust_aws_byok_key.ext_key.aws_param.key_id
 
-  # Initial material - applied first to enable the key
-  key_material {
-    source_key_identifier    = ciphertrust_cm_key.material_v1.id
-    source_key_tier          = "local"
-    key_material_description = "Initial key material - version 1"
-  }
-
-  # Rotation material - adding this entry triggers a rotate-material call on the next apply.
-  # The key will have two rotation history entries: material_v1 (PREVIOUS) and material_v2 (CURRENT).
-  key_material {
-    source_key_identifier    = ciphertrust_cm_key.material_v2.id
-    source_key_tier          = "local"
-    key_material_description = "Rotated key material - version 2"
-    valid_to                 = "2030-01-01T00:00:00Z"
-  }
+  key_material = [
+    # Initial material - applied first to enable the key
+    {
+      source_key_identifier    = ciphertrust_cm_key.material_v1.id
+      source_key_tier          = "local"
+      key_material_description = "Initial key material - version 1"
+    },
+    # Rotation material - adding this entry triggers a rotate-material call on the next apply.
+    # The key will have two rotation history entries: material_v1 (PREVIOUS) and material_v2 (CURRENT).
+    {
+      source_key_identifier    = ciphertrust_cm_key.material_v2.id
+      source_key_tier          = "local"
+      key_material_description = "Rotated key material - version 2"
+      valid_to                 = "2030-01-01T00:00:00Z"
+    }
+  ]
 }
 ```
 

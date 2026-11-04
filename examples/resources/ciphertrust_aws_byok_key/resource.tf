@@ -38,7 +38,7 @@ resource "ciphertrust_scheduler" "scheduled_rotation" {
 resource "ciphertrust_cm_key" "local_aes" {
   name      = "name"
   algorithm = "AES"
-  size      = 256
+  key_size  = 256
 }
 
 # BYOK key with optional attributes - alias, description, tags, and material expiry
