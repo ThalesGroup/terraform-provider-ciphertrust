@@ -1,3 +1,46 @@
+# 1.1.0
+
+## Provider Configuration
+    Added the following configuration options for Cloud Key Manager Azure operations:
+    azure_operation_timeout: Maximum time, in seconds, to wait for an operation to complete.
+    cloud_key_manager.azure:
+        purge_keys_on_delete: If true, purge Azure keys when they are destroyed, provided the vault permits purging.
+        recover_soft_deleted_keys: If true, allow Azure key resources to be created by recovering soft-deleted keys.
+        retain_key_backups_after_purge: If false, delete all backups of an Azure key resource, preventing future key recovery.
+        purge_certificates_on_delete: If true, purge Azure certificates when they are destroyed, provided the vault permits purging.
+        recover_soft_deleted_certificates: If true, allow Azure certificate resources to be created by recovering soft-deleted certificates.
+        purge_secrets_on_delete: If true, purge Azure secrets when they are destroyed, provided the vault permits purging.
+        recover_soft_deleted_secrets: If true, allow Azure secret resources to be created by recovering soft-deleted secrets.
+ 
+## New Resources
+    ciphertrust_azure_vault
+    ciphertrust_azure_acl
+    ciphertrust_azure_key
+    ciphertrust_azure_certificate
+    ciphertrust_azure_secret
+    ciphertrust_azure_key_pit_backup
+
+## New DataSources
+    ciphertrust_azure_subscription_details
+    ciphertrust_azure_subscription_list
+    ciphertrust_azure_vault_details
+    ciphertrust_azure_vault_list
+    ciphertrust_azure_vault_list
+    ciphertrust_azure_key_list
+    ciphertrust_azure_certificate_list
+    ciphertrust_azure_secret_list
+    ciphertrust_azure_key_pit_backup_list
+
+# Updated Resources
+    ciphertrust_aws_key_material
+        Support for AWS key material operations on CipherTrust Manager 2.22.
+    ciphertrust_aws_key
+        Prevent applying a scheduler to archived AWS keys. 
+        A key becomes archived once it is rotated to a new key by an CipherTrust Manager AWS key rotation scheduler.
+    ciphertrust_scheduler
+        Added cckm_key_backup operation and cckm_key_backup_params. This scheduler downloads and saves encrypted cloud key
+        backup blobs at specified time intervals. These backups can be used to restore keys.
+
 # 1.0.1
 
 ## Security: Secure-by-default TLS

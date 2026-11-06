@@ -91,9 +91,9 @@ func (r *resourceAWSKeyMaterial) Schema(_ context.Context, _ resource.SchemaRequ
 		Description: "Manage key material for an existing AWS EXTERNAL (BYOK) KMS key through CipherTrust Manager.\n\n" +
 			"This resource imports key material from CipherTrust Manager source keys into an AWS EXTERNAL key and manages the complete key material lifecycle, including rotation, recovery, and deletion.\n\n" +
 			"**CipherTrust Manager version requirements:**\n\n" +
-			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.23 or later, or CDSPaaS.\n" +
+			"* Single-region EXTERNAL symmetric keys: CipherTrust Manager 2.22 or later, or CDSPaaS.\n" +
 			"* Multi-region EXTERNAL symmetric keys: CipherTrust Manager 2.24 or later, or CDSPaaS.\n" +
-			"* CipherTrust Manager versions earlier than 2.23 are not supported by this resource.\n\n" +
+			"* CipherTrust Manager versions earlier than 2.22 are not supported by this resource.\n\n" +
 			"Key features:\n\n" +
 			"* Import key material into AWS EXTERNAL symmetric keys.\n" +
 			"* Rotate to new key material by adding additional `key_material` entries.\n" +
@@ -230,8 +230,8 @@ func (r *resourceAWSKeyMaterial) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError(details, "")
 		return
 	}
-	// Version guard: on CM 2.23, only single-region is supported; MRK requires CM 2.24+.
-	// The < 2.23 guard runs at plan time in ModifyPlan; the MRK guard runs here after we
+	// Version guard: on CM 2.22 and 2.23, only single-region is supported; MRK requires CM 2.24+.
+	// The < 2.22 guard runs at plan time in ModifyPlan; the MRK guard runs here after we
 	// can inspect the actual key type from the CipherTrust Manager API response.
 	// On CDSPaaS the server confirms MR BYOK key material is supported, so only
 	// apply the version gate for on-prem CM < 2.24.
@@ -415,12 +415,12 @@ func (r *resourceAWSKeyMaterial) ModifyPlan(ctx context.Context, req resource.Mo
 	}
 	// Create path: state is null.
 	if req.State.Raw.IsNull() {
-		// CM version gate: ciphertrust_aws_key_material requires CM 2.23+.
+		// CM version gate: ciphertrust_aws_key_material requires CM 2.22+.
 		// This check runs at plan time so the user gets a clear error before any
 		// API calls are made. On CDSPaaS ciphertrust_aws_key_material is supported.
-		if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 223 {
+		if r.client != nil && !r.client.IsCDSPaaS && r.client.CMVersion < 222 {
 			resp.Diagnostics.AddError(
-				common.UnsupportedCMVersion("ciphertrust_aws_key_material", r.client.CMFullVersion, "2.23"),
+				common.UnsupportedCMVersion("ciphertrust_aws_key_material", r.client.CMFullVersion, "2.22"),
 				"",
 			)
 			return
@@ -1262,7 +1262,7 @@ func (r *resourceAWSKeyMaterial) repairMultiRegionReplicas(ctx context.Context, 
 		// has been received by AWS and will be acted on asynchronously. We refresh the
 		// primary key after all replicas are processed to trigger CM to re-check AWS state.
 		//
-		// CM 2.23 rejects import_type for MR replica keys ("only supported for single region AES key.").
+		// CM < 2.24 rejects import_type for MR replica keys ("only supported for single region AES key.").
 		// Suppress it by passing an empty string; ImportByokKeyMaterial omits the field when empty.
 		importType := "EXISTING_KEY_MATERIAL"
 		if !r.client.IsCDSPaaS && r.client.CMVersion < 224 {
@@ -1362,7 +1362,7 @@ func ImportByokKeyMaterial(ctx context.Context, id string, client *common.Client
 		ValidTo:       validTo,
 	}
 	// Only include import_type when a non-empty value is provided.
-	// Call sites that must suppress import_type (e.g. MR replica imports on CM 2.23)
+	// Call sites that must suppress import_type (e.g. MR replica imports on CM < 2.24)
 	// pass an empty string so the field is omitted from the request.
 	if importType != "" {
 		payload.ImportType = &importType
@@ -1428,7 +1428,7 @@ func rotateToNewMaterial(ctx context.Context, id string, client *common.Client, 
 
 	// CM < 224: rotate-material ignores source_key_identifier and calls RotateKeyOnDemand
 	// directly without first staging pending material - AWS rejects the call. Use the
-	// CM 2.23 UI flow instead: call import-material with NEW_KEY_MATERIAL to stage the
+	// CM < 2.24 UI flow instead: call import-material with NEW_KEY_MATERIAL to stage the
 	// material as PENDING_ROTATION, then return false so the outer retry loop re-classifies
 	// and repairKeyMaterialRotations activates it via rotate-material with an empty body.
 	// On-prem CM < 2.24 does not support rotate-material with source_key_identifier.

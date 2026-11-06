@@ -648,16 +648,16 @@ func (p *ciphertrustProvider) Configure(ctx context.Context, req provider.Config
 
 	// Surface the insecure mode loudly — it should only be used in test
 	// environments, never in production (CWE-295).
-	//if no_ssl_verify {
-	//	//resp.Diagnostics.AddAttributeWarning(
-	//	//	path.Root("no_ssl_verify"),
-	//	//	"TLS certificate verification is disabled",
-	//	//	"`no_ssl_verify = true` disables TLS certificate chain and hostname validation for all "+
-	//	//		"CipherTrust API calls. This is intended for local development and testing only and "+
-	//	//		"must not be used in production. For private PKI or air-gapped environments supply a "+
-	//	//		"custom CA bundle via `ca_cert` instead.",
-	//	//)
-	//}
+	if no_ssl_verify {
+		resp.Diagnostics.AddAttributeWarning(
+			path.Root("no_ssl_verify"),
+			"TLS certificate verification is disabled",
+			"`no_ssl_verify = true` disables TLS certificate chain and hostname validation for all "+
+				"CipherTrust API calls. This is intended for local development and testing only and "+
+				"must not be used in production. For private PKI or air-gapped environments supply a "+
+				"custom CA bundle via `ca_cert` instead.",
+		)
+	}
 
 	tlsOpts := common.TLSOptions{
 		InsecureSkipVerify: no_ssl_verify,

@@ -1,6 +1,7 @@
 # ciphertrust_aws_key_import_material has been superseded by ciphertrust_aws_key_material.
 # Use ciphertrust_aws_byok_key to create an EXTERNAL key and ciphertrust_aws_key_material
 # to import and manage key material versions.
+# ciphertrust_aws_key_material requires CipherTrust Manager 2.22 or later (single-region keys).
 
 # Pre-requisites
 resource "ciphertrust_aws_connection" "aws_connection" {
@@ -31,16 +32,18 @@ resource "ciphertrust_aws_byok_key" "ext_key" {
 resource "ciphertrust_cm_key" "new_key_material" {
   name      = "new-material"
   algorithm = "AES"
-  size      = 256
+  key_size  = 256
 }
 
 # Import key material - the key transitions from PendingImport to Enabled
 resource "ciphertrust_aws_key_material" "km" {
-  aws_key_id = ciphertrust_aws_byok_key.ext_key.key_id
+  aws_key_id = ciphertrust_aws_byok_key.ext_key.aws_param.key_id
   kms_id     = ciphertrust_aws_kms.kms.id
 
-  key_material {
-    source_key_identifier = ciphertrust_cm_key.new_key_material.id
-    source_key_tier       = "local"
-  }
+  key_material = [
+    {
+      source_key_identifier = ciphertrust_cm_key.new_key_material.id
+      source_key_tier       = "local"
+    }
+  ]
 }

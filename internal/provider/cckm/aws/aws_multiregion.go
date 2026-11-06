@@ -479,7 +479,7 @@ func importAllMaterialsToReplica(ctx context.Context, id string, client *common.
 
 		client.Log.Info(fmt.Sprintf("[aws_multiregion.go -> importAllMaterialsToReplica] entry[%d]: importing srcID: %s srcTier: %s to replicaKeyID: %s", idx, srcID, srcTier, replicaKeyID))
 
-		// CM 2.23 rejects import_type for MR replica keys ("only supported for single region AES key.").
+		// CM < 2.24 rejects import_type for MR replica keys ("only supported for single region AES key.").
 		// Suppress it by passing an empty string; ImportByokKeyMaterial omits the field when empty.
 		importType := "EXISTING_KEY_MATERIAL"
 		if !client.IsCDSPaaS && client.CMVersion < 224 {
