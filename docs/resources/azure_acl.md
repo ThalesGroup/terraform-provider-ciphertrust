@@ -74,13 +74,15 @@ resource "ciphertrust_azure_acl" "group_acl" {
 | Download Report                  |  reportdownload          | Permission to download a report. |
 | View Report                      |  reportview              | Permission to view report content. |
 | | | |
-| Create (key template)            |  keycreatewithtemplate   | Permission to create an Azure key using a key template. |
-| Upload (key template)            |  uploadkeywithtemplate   | Permission to upload an Azure key using a key template. |
+| Create (key template)            |  keycreatewithtemplate\*  | Permission to create an Azure key using a key template. |
+| Upload (key template)            |  uploadkeywithtemplate\*  | Permission to upload an Azure key using a key template. |
 | | | |
-| Create Key Template              |  createkeytemplate       | Permission to create an Azure key template. |
-| List / Get Key Templates         |  viewkeytemplate         | Permission to view Azure key templates and get the details of a key template. |
-| Update Key Template              |  updatekeytemplate       | Permission to update an Azure key template. |
-| Delete Key Template              |  deletekeytemplate       | Permission to delete an Azure key template. |
+| Create Key Template              |  createkeytemplate\*      | Permission to create an Azure key template. |
+| List / Get Key Templates         |  viewkeytemplate\*        | Permission to view Azure key templates and get the details of a key template. |
+| Update Key Template              |  updatekeytemplate\*      | Permission to update an Azure key template. |
+| Delete Key Template              |  deletekeytemplate\*      | Permission to delete an Azure key template. |
+
+\* The key template actions are only valid on CipherTrust Manager 2.22 and later.
 
 The 'view' permission must be included with the 'key' actions, 'secretview' with the 'secret' actions and 'certificateview' with the 'certificate' actions. 'viewkeytemplate' must be included with the key template actions ('view' as well for 'keycreatewithtemplate' and 'uploadkeywithtemplate').
 
