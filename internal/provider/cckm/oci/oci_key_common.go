@@ -154,15 +154,6 @@ func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID
 	if err != nil {
 		msg := "Error scheduling OCI key for deletion."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
-		// A retried request (after an empty-body 500) may find the key already scheduled
-		// because the first attempt succeeded server side. Confirm via the key state.
-		if recheck, getErr := ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys"); getErr == nil {
-			state := gjson.Get(recheck, "oci_params.lifecycle_state").String()
-			if state == keyStateScheduledForDeletion || state == keyStatePendingDeletion {
-				client.Log.Warn("[oci_key_common.go -> deleteOCIKey] schedule-deletion returned an error but the key is already " + state + ", treating as success. key_id: " + keyID + ", error: " + err.Error())
-				return
-			}
-		}
 		if strings.Contains(err.Error(), notFoundError) {
 			client.Log.Warn(details)
 			diags.AddWarning(details, "")
@@ -221,7 +212,7 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> getOciKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> getOciKey][" + id + "]")
 
-	response, err := ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys")
+	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			if opLabel == "deleting" {
@@ -439,7 +430,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> patchKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> patchKey][" + id + "]")
 
-	response, err := ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys")
+	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		msg := "Error reading OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -693,7 +684,7 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 				return
 			}
 		} else {
-			response, err = ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys")
+			response, err = client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 			if err != nil {
 				msg := "Error reading OCI key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})

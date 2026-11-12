@@ -536,7 +536,7 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	response, err := ociGetByIdWithRetry(ctx, r.client, id, keyID, common.URL_OCI+"/keys")
+	response, err := r.client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		msg := "Error reading OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
