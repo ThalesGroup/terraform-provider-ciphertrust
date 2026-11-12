@@ -90,6 +90,26 @@ func (r *resourceCCKMOCIByokKey) Schema(_ context.Context, _ resource.SchemaRequ
 				Computed:    true,
 				Description: "Whether the key is enabled for auto-rotation.",
 			},
+			"backup_failure_reason": schema.StringAttribute{
+				Computed:    true,
+				Description: "Reason the key backup failed. Applicable only to HSM keys in OCI Virtual Private Vaults.",
+			},
+			"backup_key_id": schema.StringAttribute{
+				Computed:    true,
+				Description: "The OCID of the key backup. Applicable only to HSM keys in OCI Virtual Private Vaults.",
+			},
+			"backup_key_name": schema.StringAttribute{
+				Computed:    true,
+				Description: "The name of the key backup. Applicable only to HSM keys in OCI Virtual Private Vaults.",
+			},
+			"backup_key_time": schema.StringAttribute{
+				Computed:    true,
+				Description: "Date/time the key backup was created. Applicable only to HSM keys in OCI Virtual Private Vaults.",
+			},
+			"backup_status": schema.StringAttribute{
+				Computed:    true,
+				Description: "Status of the key backup. Applicable only to HSM keys in OCI Virtual Private Vaults.",
+			},
 			"cloud_name": schema.StringAttribute{
 				Computed:    true,
 				Description: "CipherTrust Manager cloud name.",
@@ -516,7 +536,7 @@ func (r *resourceCCKMOCIByokKey) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	response, err := r.client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
+	response, err := ociGetByIdWithRetry(ctx, r.client, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		msg := "Error reading OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})

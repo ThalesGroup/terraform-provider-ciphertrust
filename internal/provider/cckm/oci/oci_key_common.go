@@ -154,6 +154,15 @@ func deleteOCIKey(ctx context.Context, id string, client *common.Client, vaultID
 	if err != nil {
 		msg := "Error scheduling OCI key for deletion."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
+		// A retried request (after an empty-body 500) may find the key already scheduled
+		// because the first attempt succeeded server side. Confirm via the key state.
+		if recheck, getErr := ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys"); getErr == nil {
+			state := gjson.Get(recheck, "oci_params.lifecycle_state").String()
+			if state == keyStateScheduledForDeletion || state == keyStatePendingDeletion {
+				client.Log.Warn("[oci_key_common.go -> deleteOCIKey] schedule-deletion returned an error but the key is already " + state + ", treating as success. key_id: " + keyID + ", error: " + err.Error())
+				return
+			}
+		}
 		if strings.Contains(err.Error(), notFoundError) {
 			client.Log.Warn(details)
 			diags.AddWarning(details, "")
@@ -212,7 +221,7 @@ func getOciKey(ctx context.Context, id string, client *common.Client, vaultID st
 	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> getOciKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> getOciKey][" + id + "]")
 
-	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
+	response, err := ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		if strings.Contains(err.Error(), notFoundError) {
 			if opLabel == "deleting" {
@@ -286,6 +295,11 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "auto_rotate").Bool())
+	state.BackupFailureReason = types.StringValue(gjson.Get(response, "failure_reason").String())
+	state.BackupKeyID = types.StringValue(gjson.Get(response, "backup_key_id").String())
+	state.BackupKeyName = types.StringValue(gjson.Get(response, "backup_key_name").String())
+	state.BackupKeyTime = types.StringValue(gjson.Get(response, "backup_key_time").String())
+	state.BackupStatus = types.StringValue(gjson.Get(response, "status").String())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.CompartmentName = types.StringValue(gjson.Get(response, "compartment_name").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
@@ -425,7 +439,7 @@ func patchKey(ctx context.Context, id string, client *common.Client, keyID strin
 	client.Log.Debug(common.MSG_METHOD_START + "[oci_key_common.go -> patchKey][" + id + "]")
 	defer client.Log.Debug(common.MSG_METHOD_END + "[oci_key_common.go -> patchKey][" + id + "]")
 
-	response, err := client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
+	response, err := ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys")
 	if err != nil {
 		msg := "Error reading OCI key."
 		details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
@@ -679,7 +693,7 @@ func waitForKeyStateChange(ctx context.Context, id string, client *common.Client
 				return
 			}
 		} else {
-			response, err = client.GetById(ctx, id, keyID, common.URL_OCI+"/keys")
+			response, err = ociGetByIdWithRetry(ctx, client, id, keyID, common.URL_OCI+"/keys")
 			if err != nil {
 				msg := "Error reading OCI key."
 				details := utils.ApiError(msg, map[string]interface{}{"error": err.Error(), "key_id": keyID})
