@@ -110,6 +110,11 @@ resource "ciphertrust_oci_key" "key" {
 
 - `account` (String) The account which owns this resource.
 - `auto_rotate` (Boolean) Whether the key is enabled for auto-rotation.
+- `backup_failure_reason` (String) Reason the key backup failed. Applicable only to HSM keys in OCI Virtual Private Vaults.
+- `backup_key_id` (String) The OCID of the key backup. Applicable only to HSM keys in OCI Virtual Private Vaults.
+- `backup_key_name` (String) The name of the key backup. Applicable only to HSM keys in OCI Virtual Private Vaults.
+- `backup_key_time` (String) Date/time the key backup was created. Applicable only to HSM keys in OCI Virtual Private Vaults.
+- `backup_status` (String) Status of the key backup. Applicable only to HSM keys in OCI Virtual Private Vaults.
 - `cloud_name` (String) CipherTrust Manager cloud name.
 - `compartment_name` (String) The compartment's name.
 - `created_at` (String) Date/time the key was created in CipherTrust Manager.
