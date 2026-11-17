@@ -10,6 +10,11 @@ import (
 type KeyCommonTFSDK struct {
 	Account                 types.String             `tfsdk:"account"`
 	AutoRotate              types.Bool               `tfsdk:"auto_rotate"`
+	BackupFailureReason     types.String             `tfsdk:"backup_failure_reason"`
+	BackupKeyID             types.String             `tfsdk:"backup_key_id"`
+	BackupKeyName           types.String             `tfsdk:"backup_key_name"`
+	BackupKeyTime           types.String             `tfsdk:"backup_key_time"`
+	BackupStatus            types.String             `tfsdk:"backup_status"`
 	CloudName               types.String             `tfsdk:"cloud_name"`
 	CompartmentName         types.String             `tfsdk:"compartment_name"`
 	CreatedAt               types.String             `tfsdk:"created_at"`
@@ -142,6 +147,11 @@ type PatchKeyCommonPayload struct {
 type DataSourceKeyJSON struct {
 	Account                     string            `json:"account"`
 	AutoRotate                  bool              `json:"auto_rotate"`
+	BackupFailureReason         string            `json:"failure_reason"`
+	BackupKeyID                 string            `json:"backup_key_id"`
+	BackupKeyName               string            `json:"backup_key_name"`
+	BackupKeyTime               string            `json:"backup_key_time"`
+	BackupStatus                string            `json:"status"`
 	CckmVaultID                 string            `json:"cckm_vault_id"`
 	CloudName                   string            `json:"cloud_name"`
 	CompartmentName             string            `json:"compartment_name"`
@@ -160,24 +170,29 @@ type DataSourceKeyJSON struct {
 }
 
 type DataSourceKeyTFSDK struct {
-	Account           types.String                 `tfsdk:"account"`
-	AutoRotate        types.Bool                   `tfsdk:"auto_rotate"`
-	CckmVaultID       types.String                 `tfsdk:"cckm_vault_id"`
-	CloudName         types.String                 `tfsdk:"cloud_name"`
-	CompartmentName   types.String                 `tfsdk:"compartment_name"`
-	CreatedAt         types.String                 `tfsdk:"created_at"`
-	ID                types.String                 `tfsdk:"id"`
-	KeyMaterialOrigin types.String                 `tfsdk:"key_material_origin"`
-	Labels            types.Map                    `tfsdk:"labels"`
-	RefreshedAt       types.String                 `tfsdk:"refreshed_at"`
-	Region            types.String                 `tfsdk:"region"`
-	Tenancy           types.String                 `tfsdk:"tenancy"`
-	UpdatedAt         types.String                 `tfsdk:"updated_at"`
-	URI               types.String                 `tfsdk:"uri"`
-	VaultID           types.String                 `tfsdk:"vault_id"`
-	KeyParams         KeyParamsTFSDK               `tfsdk:"oci_key_params"`
-	BYOKKeyParams     DataSourceBYOKKeyParamsTFSDK `tfsdk:"external_key_params"`
-	KeyVersionSummary types.List                   `tfsdk:"version_summary"`
+	Account             types.String                 `tfsdk:"account"`
+	AutoRotate          types.Bool                   `tfsdk:"auto_rotate"`
+	BackupFailureReason types.String                 `tfsdk:"backup_failure_reason"`
+	BackupKeyID         types.String                 `tfsdk:"backup_key_id"`
+	BackupKeyName       types.String                 `tfsdk:"backup_key_name"`
+	BackupKeyTime       types.String                 `tfsdk:"backup_key_time"`
+	BackupStatus        types.String                 `tfsdk:"backup_status"`
+	CckmVaultID         types.String                 `tfsdk:"cckm_vault_id"`
+	CloudName           types.String                 `tfsdk:"cloud_name"`
+	CompartmentName     types.String                 `tfsdk:"compartment_name"`
+	CreatedAt           types.String                 `tfsdk:"created_at"`
+	ID                  types.String                 `tfsdk:"id"`
+	KeyMaterialOrigin   types.String                 `tfsdk:"key_material_origin"`
+	Labels              types.Map                    `tfsdk:"labels"`
+	RefreshedAt         types.String                 `tfsdk:"refreshed_at"`
+	Region              types.String                 `tfsdk:"region"`
+	Tenancy             types.String                 `tfsdk:"tenancy"`
+	UpdatedAt           types.String                 `tfsdk:"updated_at"`
+	URI                 types.String                 `tfsdk:"uri"`
+	VaultID             types.String                 `tfsdk:"vault_id"`
+	KeyParams           KeyParamsTFSDK               `tfsdk:"oci_key_params"`
+	BYOKKeyParams       DataSourceBYOKKeyParamsTFSDK `tfsdk:"external_key_params"`
+	KeyVersionSummary   types.List                   `tfsdk:"version_summary"`
 }
 
 type DataSourceKeyParamsJSON struct {

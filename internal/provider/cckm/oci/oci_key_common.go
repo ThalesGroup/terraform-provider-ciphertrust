@@ -286,6 +286,11 @@ func setCommonKeyState(ctx context.Context, id string, client *common.Client, re
 
 	state.Account = types.StringValue(gjson.Get(response, "account").String())
 	state.AutoRotate = types.BoolValue(gjson.Get(response, "auto_rotate").Bool())
+	state.BackupFailureReason = types.StringValue(gjson.Get(response, "failure_reason").String())
+	state.BackupKeyID = types.StringValue(gjson.Get(response, "backup_key_id").String())
+	state.BackupKeyName = types.StringValue(gjson.Get(response, "backup_key_name").String())
+	state.BackupKeyTime = types.StringValue(gjson.Get(response, "backup_key_time").String())
+	state.BackupStatus = types.StringValue(gjson.Get(response, "status").String())
 	state.CloudName = types.StringValue(gjson.Get(response, "cloud_name").String())
 	state.CompartmentName = types.StringValue(gjson.Get(response, "compartment_name").String())
 	state.CreatedAt = types.StringValue(gjson.Get(response, "createdAt").String())
