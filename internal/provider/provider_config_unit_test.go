@@ -38,10 +38,11 @@ import (
 // Shared test helpers
 // ---------------------------------------------------------------------------
 
-// startMockCM starts a local TLS server that handles the two CM endpoints
+// startMockCM starts a local TLS server that handles the CM endpoints
 // called during provider initialisation:
 //   - POST /api/v1/auth/tokens  -- returns a minimal fake JWT response
 //   - GET  /api/v1/cluster      -- returns nodeCount=1 (not clustered)
+//   - GET  /api/v1/system/info  -- returns a fake CM version (2.19.0)
 //
 // The server is registered for automatic closure via t.Cleanup. Returns the
 // server base URL (e.g. "https://127.0.0.1:PORT").
@@ -57,6 +58,8 @@ func startMockCM(t *testing.T) string {
 			})
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "cluster"):
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"nodeCount": 1})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "system/info"):
+			_ = json.NewEncoder(w).Encode(map[string]string{"version": "2.19.0"})
 		default:
 			http.NotFound(w, r)
 		}
@@ -691,12 +694,12 @@ func writeAzureConfigFile(t *testing.T, dir string, lines ...string) {
 	}
 }
 
-// TestUnit_Provider_AzureSettings verifies the cloud_key_manager.azure
+// TestCckmAzureProviderSettings verifies the cloud_key_manager.azure
 // settings: defaults, provider block values, config file values, precedence
 // (block over file) and rejection of invalid config file values. There is no
 // environment variable for these settings. Subtests that use the config file
 // are skipped on Windows because the permission check uses Unix mode bits.
-func TestUnit_Provider_AzureSettings(t *testing.T) {
+func TestCckmAzureProviderSettings(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		cmURL, dir := azureTestEnv(t)
 

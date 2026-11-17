@@ -218,7 +218,22 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 	//   %[6]s fake vault id (only used by modifyPlanConfig)
 	// Each subject gets the view action it requires plus other actions: user1 uses keys
 	// (view), user2 uses secrets (secretview), group1 uses certificates (certificateview)
-	// and group2 uses key templates (viewkeytemplate).
+	// and group2 uses key templates (viewkeytemplate) on CM 2.22+. Key template actions are not
+	// accepted before CM 2.22, so group2 uses report actions (reportview) on earlier versions.
+	//   %[7]s group2 create actions, %[8]s group2 actions after the add step
+	group2CreateActions := []string{"viewkeytemplate", "createkeytemplate"}
+	group2AddActions := []string{"viewkeytemplate", "createkeytemplate", "updatekeytemplate"}
+	if getCipherTrustVersion() < 222 {
+		group2CreateActions = []string{"reportview", "reportcreate"}
+		group2AddActions = []string{"reportview", "reportcreate", "reportdownload"}
+	}
+	quoteActions := func(actions []string) string {
+		quoted := make([]string, 0, len(actions))
+		for _, a := range actions {
+			quoted = append(quoted, `"`+a+`"`)
+		}
+		return strings.Join(quoted, ", ")
+	}
 
 	createConfigFmt := `
 		%[1]s
@@ -254,7 +269,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 		resource "ciphertrust_azure_acl" "group2_acl" {
 			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group2.id
-			actions  = ["viewkeytemplate", "createkeytemplate"]
+			actions  = [%[7]s]
 		}
 		data "ciphertrust_azure_vault_list" "vault_ds" {
 			depends_on = [
@@ -302,7 +317,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 		resource "ciphertrust_azure_acl" "group2_acl" {
 			vault_id = ciphertrust_azure_vault.nonpurgeable_vault.id
 			group    = ciphertrust_groups.group2.id
-			actions  = ["viewkeytemplate", "createkeytemplate", "updatekeytemplate"]
+			actions  = [%[8]s]
 		}
 		data "ciphertrust_azure_vault_list" "vault_ds" {
 			depends_on = [
@@ -315,9 +330,8 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 				name = ciphertrust_azure_vault.nonpurgeable_vault.cckm_vault_name
 			}
 		}`
-	createConfig := fmt.Sprintf(createConfigFmt, baseConfig, user1Name, user2Name, group1Name, group2Name, fakeVaultID)
-	addActionsConfig := fmt.Sprintf(addActionsConfigFmt, baseConfig, user1Name, user2Name, group1Name, group2Name, fakeVaultID)
-	// user1 is reduced to view only, group2 is removed, user2 and group1 are unchanged.
+	createConfig := fmt.Sprintf(createConfigFmt, baseConfig, user1Name, user2Name, group1Name, group2Name, fakeVaultID, quoteActions(group2CreateActions), quoteActions(group2AddActions))
+	addActionsConfig := fmt.Sprintf(addActionsConfigFmt, baseConfig, user1Name, user2Name, group1Name, group2Name, fakeVaultID, quoteActions(group2CreateActions), quoteActions(group2AddActions))
 	// user1 is reduced to view only, group2_acl is removed, user2 and group1 are unchanged.
 	removeActionsConfigFmt := `
 		%[1]s
@@ -463,7 +477,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 					checkAzureAclActions(&capturedVaultID, &capturedUser1ID, []string{"view", "keycreate", "keyupdate"}),
 					checkAzureAclActions(&capturedVaultID, &capturedUser2ID, []string{"secretview", "secretcreate"}),
 					checkAzureAclActions(&capturedVaultID, &capturedGroup1ID, []string{"certificateview", "certificatecreate"}),
-					checkAzureAclActions(&capturedVaultID, &capturedGroup2ID, []string{"viewkeytemplate", "createkeytemplate"}),
+					checkAzureAclActions(&capturedVaultID, &capturedGroup2ID, group2CreateActions),
 				),
 			},
 			{
@@ -496,7 +510,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 					checkAzureAclActions(&capturedVaultID, &capturedUser1ID, []string{"view", "keycreate", "keyupdate", "keydelete"}),
 					checkAzureAclActions(&capturedVaultID, &capturedUser2ID, []string{"secretview", "secretcreate", "secretdelete"}),
 					checkAzureAclActions(&capturedVaultID, &capturedGroup1ID, []string{"certificateview", "certificatecreate", "certificatedelete"}),
-					checkAzureAclActions(&capturedVaultID, &capturedGroup2ID, []string{"viewkeytemplate", "createkeytemplate", "updatekeytemplate"}),
+					checkAzureAclActions(&capturedVaultID, &capturedGroup2ID, group2AddActions),
 				),
 			},
 			{
@@ -566,7 +580,7 @@ func TestCckmAzureAclUsersAndGroups(t *testing.T) {
 					captureIDs,
 					resource.TestCheckResourceAttr(azureAclVaultDataSource, "vaults.0.acls.#", "4"),
 					checkAzureAclActions(&capturedVaultID, &capturedUser1ID, []string{"view", "keycreate", "keyupdate"}),
-					checkAzureAclActions(&capturedVaultID, &capturedGroup2ID, []string{"viewkeytemplate", "createkeytemplate"}),
+					checkAzureAclActions(&capturedVaultID, &capturedGroup2ID, group2CreateActions),
 				),
 			},
 		},
